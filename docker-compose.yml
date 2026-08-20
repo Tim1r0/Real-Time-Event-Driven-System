@@ -1,32 +1,52 @@
 services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    hostname: rabbitmq
     container_name: rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: "guest"
-      RABBITMQ_DEFAULT_PASS: "guest"
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
-    image: redis:8-alpine
+    image: redis:7-alpine
+    container_name: redis
     ports:
       - "6379:6379"
-volumes:
-  rabbitmq-data:
-#
-#  api:
-#    build:
-#      context: .
-#      dockerfile: services/api/src/Dockerfile
-#    container_name: fast-api-app
-#    ports:
-#      - "8080:8080"
-#    env_file: .env
-#    depends_on:
-#      - rabbitmq
-#      - redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  api:
+    build: .
+    container_name: fast_api_app
+    ports:
+      - "8080:8080"
+    environment:
+      - SRC_CONFIG_RUN__HOST=0.0.0.0
+      - SRC_CONFIG_RABBIT__HOST=rabbitmq
+      - SRC_CONFIG_REDIS__HOST=redis
+    command: python -m services.api.src.main
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    container_name: taskiq_worker
+    environment:
+      - SRC_CONFIG_RABBIT__HOST=rabbitmq
+      - SRC_CONFIG_REDIS__HOST=redis
+    command: taskiq worker services.worker.src.tasks:broker --log-level INFO
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

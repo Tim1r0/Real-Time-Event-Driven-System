@@ -1,6 +1,5 @@
 from taskiq_aio_pika.broker import AioPikaBroker
 from taskiq_redis import RedisAsyncResultBackend
-
 from services.core import settings
 
 redis_backend = RedisAsyncResultBackend(
